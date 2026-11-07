@@ -209,7 +209,14 @@ internal static class Win32
         return 1.0;
     }
 
-    /// <summary>Vrai si la fenêtre au premier plan couvre tout son moniteur (jeu plein écran).</summary>
+    public const int GWL_STYLE = -16;
+    public const long WS_CAPTION = 0x00C0_0000;
+
+    /// <summary>
+    /// Vrai si la fenêtre au premier plan est un vrai plein écran type jeu :
+    /// couvre tout le moniteur ET n'a pas de bordure/barre de titre (WS_CAPTION).
+    /// Une simple fenêtre maximisée (qui garde sa bordure) n'est PAS du plein écran.
+    /// </summary>
     public static bool IsForegroundFullscreen()
     {
         var hwnd = GetForegroundWindow();
@@ -221,7 +228,13 @@ internal static class Win32
         if (mon == 0) return false;
         var mi = new MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFO>() };
         if (!GetMonitorInfoW(mon, ref mi)) return false;
-        return r.Left <= mi.rcMonitor.Left && r.Top <= mi.rcMonitor.Top
-            && r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
+
+        bool coversMonitor = r.Left <= mi.rcMonitor.Left && r.Top <= mi.rcMonitor.Top
+                          && r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
+        if (!coversMonitor) return false;
+
+        // une fenêtre maximisée garde WS_CAPTION ; un jeu plein écran borderless ne l'a pas.
+        long style = GetWindowLongW(hwnd, GWL_STYLE);
+        return (style & WS_CAPTION) == 0;
     }
 }

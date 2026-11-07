@@ -55,8 +55,15 @@ internal static class InputSimulator
 
     public static void PressKeys(List<ushort> keys)
     {
-        // Ordre : modificateurs d'abord, touches finales ensuite, puis tout relâcher.
-        var ordered = keys.OrderByDescending(k => Array.IndexOf(Modifiers, k) is var i && i < 0 ? int.MaxValue : -i).ToList();
+        // Ordre d'appui : modificateurs (ctrl, shift, alt, win) d'abord, touche finale ensuite,
+        // puis relâchement en sens inverse. Un mauvais ordre enverrait la lettre seule.
+        var ordered = keys
+            .OrderBy(k =>
+            {
+                int i = Array.IndexOf(Modifiers, k);
+                return i < 0 ? int.MaxValue : i;
+            })
+            .ToList();
         var inputs = new List<Win32.INPUT>(ordered.Count * 2);
         foreach (var vk in ordered) inputs.Add(Key(vk, false));
         for (int i = ordered.Count - 1; i >= 0; i--) inputs.Add(Key(ordered[i], true));

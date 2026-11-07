@@ -42,7 +42,9 @@ public sealed class WheelRenderer : FrameworkElement
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<MenuItem, object> _iconCache = new();
 
     public double Radius => _radius;
-    public double Deadzone => _radius * 0.22;
+    /// <summary>Zone morte ≈ mi-chemin du moyeu aux pastilles : la sélection ne démarre qu'en visant les icônes.</summary>
+    public double Deadzone => _radius * 0.34;
+    public double Ring => _radius * 0.62;
     public double ElementHalf => _radius * 2.05;
 
     public void Configure(AppConfig cfg)
@@ -106,7 +108,7 @@ public sealed class WheelRenderer : FrameworkElement
     {
         double dx = p.X - f.Center.X, dy = p.Y - f.Center.Y;
         double dist = Math.Sqrt(dx * dx + dy * dy);
-        if (dist < radius * 0.22) return -1;
+        if (dist < radius * 0.34) return -1; // moyeu : rien de sélectionné
         int n = f.Menu.Items.Count;
         if (n == 0) return -1;
         double step = 360.0 / n;
@@ -256,8 +258,11 @@ public sealed class WheelRenderer : FrameworkElement
         string title, sub;
         if (hoverIdx >= 0 && hoverIdx < n)
         {
-            title = f.Menu.Items[hoverIdx].Label;
-            sub = f.Menu.Items[hoverIdx].Description ?? "";
+            var hoverItem = f.Menu.Items[hoverIdx];
+            title = hoverItem.Label;
+            sub = hoverItem.Children is { Count: > 0 }
+                ? hoverItem.Description ?? "Glissez dessus pour ouvrir"
+                : hoverItem.Description ?? "";
         }
         else
         {
@@ -286,7 +291,10 @@ public sealed class WheelRenderer : FrameworkElement
         switch (source)
         {
             case Geometry geo:
+                // les géométries sont dessinées sur une grille 0..24 : recentrer sur la pastille
+                dc.PushTransform(new TranslateTransform(-12, -12));
                 dc.DrawGeometry(null, hovered ? _theme.AccentPen : _theme.IconPen, geo);
+                dc.Pop();
                 break;
             case ImageSource img:
                 dc.DrawImage(img, new Rect(-_iconSize / 2.0, -_iconSize / 2.0, _iconSize, _iconSize));

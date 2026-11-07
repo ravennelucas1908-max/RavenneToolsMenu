@@ -128,6 +128,15 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     bool ITriggerTarget.HandleTriggerDown(int x, int y)
     {
+        // roue déjà affichée en mode « clic » : reprendre le geste là où on en était
+        if (_open && _sticky)
+        {
+            _sticky = false;
+            _triggerKind = DetectTriggerKind();
+            _pressTime = Environment.TickCount64;
+            _draggedOut = false;
+            return true;
+        }
         if (_open) return false;
         if (!ShouldOpen())
         {
@@ -145,7 +154,12 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     void ITriggerTarget.HandleRightDown(int x, int y)
     {
-        if (_open || !ShouldOpen()) return;
+        if (_open)
+        {
+            CloseWheel(); // clic droit = fermer la roue (mode clic)
+            return;
+        }
+        if (!ShouldOpen()) return;
         _rightArmed = true;
         _rightPos = new Point(x, y);
         _rightTimer.Start();
@@ -310,6 +324,7 @@ public sealed class WheelWindow : Window, ITriggerTarget
         long now = Environment.TickCount64;
         double radius = _renderer.Radius;
         double dz = _renderer.Deadzone;
+        double ring = _renderer.Ring;
 
         double dist = Math.Sqrt(Math.Pow(p.X - top.Center.X, 2) + Math.Pow(p.Y - top.Center.Y, 2));
         if (dist > dz)
@@ -320,34 +335,34 @@ public sealed class WheelWindow : Window, ITriggerTarget
         }
 
         int idx = WheelRenderer.HitIndex(top, p, radius);
-        if (idx < 0 || idx >= top.Menu.Items.Count) return; // défense en profondeur
-        if (idx != _hover)
-        {
-            _hover = idx;
-            _hoverSince = now;
-        }
 
-        // ouvrir un sous-menu après un court survol (≈ 80 ms)
-        if (idx >= 0)
+        // sous-menu : on l'ouvre dès que le pointeur atteint vraiment la pastille
+        // (distance proche de l'anneau) — pas de temporisation, c'est direct.
+        if (idx >= 0 && idx < top.Menu.Items.Count)
         {
             var item = top.Menu.Items[idx];
-            if (item.Children is { Count: > 0 } && now - _hoverSince > 80 && dist > dz * 1.15)
+            if (idx != _hover) { _hover = idx; _hoverSince = now; }
+            if (item.Children is { Count: > 0 } && dist >= ring * 0.85)
             {
                 Push(item, idx);
                 _renderer.SetPointer(p, -1);
                 return;
             }
         }
-
-        // revenir au niveau parent : rester dans la zone morte > 110 ms
-        if (idx < 0 && _frames.Count > 1 && _leftDeadzone)
+        else if (idx < 0)
         {
-            if (!_popArmed) { _popArmed = true; _deadzoneSince = now; }
-            else if (now - _deadzoneSince > 110)
+            _hover = -1;
+
+            // revenir au niveau parent : rester dans le moyeu > 150 ms
+            if (_frames.Count > 1 && _leftDeadzone)
             {
-                Pop();
-                _renderer.SetPointer(p, -1);
-                return;
+                if (!_popArmed) { _popArmed = true; _deadzoneSince = now; }
+                else if (now - _deadzoneSince > 150)
+                {
+                    Pop();
+                    _renderer.SetPointer(p, -1);
+                    return;
+                }
             }
         }
         else _popArmed = false;
@@ -415,26 +430,52 @@ public sealed class WheelWindow : Window, ITriggerTarget
             && Environment.TickCount64 - _pressTime < Math.Clamp(_cfg.Cfg.Trigger.QuickClickMs, 60, 600)
             && !_draggedOut;
 
-        MenuItem? toRun = null;
-
+        // relâchement / clic sur une option
         if (idx >= 0 && idx < top.Menu.Items.Count)
         {
             var item = top.Menu.Items[idx];
+
             if (item.Children is { Count: > 0 })
-                toRun = item.Action is null ? null : item; // relâchement rapide sur un parent : son action directe
-            else
-                toRun = item;
+            {
+                if (item.Action is not null)
+                {
+                    Log.Info($"Relâchement sur « {item.Label} » → action {item.Action.Kind}");
+                    CloseWheel();
+                    _exec.Run(item, _ctx);
+                    return;
+                }
+                // parent sans action : ouvrir son sous-menu et garder la roue affichée
+                // (mode clic : clic gauche = choisir, moyeu = revenir, clic droit = fermer)
+                Log.Info($"Sous-menu « {item.Label} » ouvert (roue maintenue affichée)");
+                Push(item, idx);
+                _sticky = true;
+                _draggedOut = false;
+                return;
+            }
+
+            Log.Info($"Relâchement sur « {item.Label} » → action {item.Action?.Kind ?? "aucune"}");
+            CloseWheel();
+            if (item.Action is not null)
+                _exec.Run(item, _ctx);
+            return;
         }
-        else if (_frames.Count > 1)
+
+        // relâchement / clic dans le moyeu
+        if (_sticky && _frames.Count > 1)
         {
-            toRun = top.ParentItem is { Action: not null } parent ? parent : null;
+            Pop(); // cliquer au centre d'un sous-menu = remonter d'un niveau
+            return;
         }
+
+        MenuItem? toRun = null;
+        if (_frames.Count > 1 && top.ParentItem is { Action: not null } parent)
+            toRun = parent;
 
         CloseWheel();
 
         if (toRun is not null)
         {
-            Log.Info($"Relâchement sur « {toRun.Label} » → action {toRun.Action?.Kind ?? "aucune"}");
+            Log.Info($"Relâchement au centre → action de « {toRun.Label} »");
             _exec.Run(toRun, _ctx);
         }
         else if (wasQuick && _cfg.Cfg.Trigger.QuickClickPassthrough && _triggerKind != TriggerKind.RightLong)
