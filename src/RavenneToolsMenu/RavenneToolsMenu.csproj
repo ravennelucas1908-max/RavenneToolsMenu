@@ -11,7 +11,7 @@
     <AssemblyName>RavenneToolsMenu</AssemblyName>
     <Product>Ravenne's Tools Menu</Product>
     <AssemblyTitle>Ravenne's Tools Menu</AssemblyTitle>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>ravenne.ico</ApplicationIcon>
     <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
@@ -19,8 +19,8 @@
     <DebugType>embedded</DebugType>
   </PropertyGroup>
 
-  <!-- WinForms n'est utilisé que pour l'icône systray : on retire ses usings globaux
-       pour éviter les conflits Pen/Brush/Point avec WPF. -->
+  <!-- WinForms n'est utilis?? que pour l'ic??ne systray : on retire ses usings globaux
+       pour ??viter les conflits Pen/Brush/Point avec WPF. -->
   <ItemGroup>
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
