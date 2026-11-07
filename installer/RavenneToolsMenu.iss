@@ -5,7 +5,7 @@
 ; RÃ©sultat : Output\RavenneToolsMenu-Setup.exe
 
 #define AppName "Ravenne's Tools Menu"
-#define AppVersion "1.0.1"
+#define AppVersion "1.1.0"
 #define AppPublisher "Ravenne"
 #define AppExeName "RavenneToolsMenu.exe"
 
