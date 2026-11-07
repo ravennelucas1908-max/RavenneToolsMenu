@@ -2,10 +2,10 @@
 #
 # Usage :
 #   powershell scripts/new-release.ps1                  # release de la version actuelle du .csproj
-#   powershell scripts/new-release.ps1 -Version 1.1.0   # incrémente la version puis release
+#   powershell scripts/new-release.ps1 -Version 1.1.0   # incremente la version puis release
 #
-# Étapes : bump .csproj + installateur → commit → tag vX.Y.Z → push.
-# Le workflow GitHub Actions "Release" compile alors l'installateur et publie la release.
+# Etapes : bump .csproj + installateur -> commit -> tag vX.Y.Z -> push.
+# Le workflow GitHub Actions "Release" compile l'installateur et publie la release.
 param(
     [string]$Version = ""
 )
@@ -20,13 +20,12 @@ $current = [regex]::Match($content, '<Version>([\d.]+)</Version>').Groups[1].Val
 if (-not $Version) { $Version = $current }
 
 if ($Version -ne $current) {
-    # bump .csproj
-    $content = $content -replace "<Version>$current</Version>", "<Version>$Version</Version>"
-    Set-Content -Path $csproj -Value $content -NoNewline -Encoding UTF8
-    # bump installateur
+    $content = $content.Replace("<Version>$current</Version>", "<Version>$Version</Version>")
+    Set-Content -Path $csproj -Value $content -NoNewline -Encoding ascii
+
     $issContent = Get-Content $iss -Raw
-    $issContent = $issContent -replace '#define AppVersion "[\d.]+"', "#define AppVersion `"$Version`""
-    Set-Content -Path $iss -Value $issContent -NoNewline -Encoding UTF8
+    $issContent = [regex]::Replace($issContent, '#define AppVersion "[\d.]+"', ('#define AppVersion "' + $Version + '"'))
+    Set-Content -Path $iss -Value $issContent -NoNewline -Encoding utf8
 
     git -C $root add $csproj $iss
     git -C $root commit -m "v$Version"
@@ -35,11 +34,11 @@ if ($Version -ne $current) {
 $tag = "v$Version"
 $existing = git -C $root tag -l $tag
 if ($existing) {
-    Write-Host "Le tag $tag existe déjà — pas de nouvelle release créée." -ForegroundColor Yellow
+    Write-Host "Le tag $tag existe deja - pas de nouvelle release creee." -ForegroundColor Yellow
     exit 1
 }
 
 git -C $root tag $tag
 git -C $root push origin main --tags
-Write-Host "Tag $tag poussé — GitHub Actions compile l'installateur et publie la release :" -ForegroundColor Green
+Write-Host "Tag $tag pousse - GitHub Actions compile l'installateur et publie la release :" -ForegroundColor Green
 Write-Host "  https://github.com/ravennelucas1908-max/RavenneToolsMenu/actions"
