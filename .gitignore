@@ -7,3 +7,4 @@ publish/
 installer/Output/
 *.log
 .video_agent/
+shots/

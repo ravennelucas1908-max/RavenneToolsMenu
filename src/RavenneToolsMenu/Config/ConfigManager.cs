@@ -63,6 +63,15 @@ public sealed class ConfigManager
                 ConfigFailed?.Invoke("Configuration vide ou invalide — valeurs par défaut conservées.");
                 return null;
             }
+
+            // Migrations : v2 = refonte sobre de l'interface (étiquettes désactivées par défaut)
+            if (cfg.Version < 2)
+            {
+                cfg.Version = 2;
+                cfg.Appearance.ShowItemLabels = false;
+                try { File.WriteAllText(ConfigPath, JsonSerializer.Serialize(cfg, ConfigJson.Options)); } catch { }
+                Log.Info("Configuration migrée en v2 (interface sobre).");
+            }
             return cfg;
         }
         catch (Exception ex)

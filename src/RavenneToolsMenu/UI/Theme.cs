@@ -7,26 +7,27 @@ namespace RavenneToolsMenu.UI;
 
 /// <summary>
 /// Palette de la roue : couleurs dérivées de l'accent, pinceaux gelés (zéro allocation au rendu).
+/// Design sobre « verre dépoli » : pastilles d'icônes givrées, vignette discrète.
 /// </summary>
 internal sealed class Theme
 {
     public Color Accent;
     public Brush AccentBrush = null!;
-    public Brush AccentSoftBrush = null!;   // accent ~20 %
-    public Brush AccentGlowBrush = null!;   // accent ~7 %
-    public Brush AccentTrailBrush = null!;  // accent ~35 %
+    public Brush AccentSoftBrush = null!;   // accent ~75 %
+    public Brush AccentDotBrush = null!;    // accent ~95 % (marqueurs sous-menu)
     public Pen AccentPen = null!;           // accent ~90 %
-    public Pen AccentSoftPen = null!;       // accent ~50 %
-
-    public Brush BackdropBrush = null!;     // disque principal
-    public Brush BackdropInnerBrush = null!;
 
     public Brush HubBrush = null!;
     public Pen HubPen = null!;
-    public Pen HairPen = null!;             // contour discret blanc
     public Pen IconPen = null!;             // icônes (blanc)
     public Brush WhiteBrush = null!;
     public Brush SubBrush = null!;
+
+    // pastilles d'icônes
+    public Brush ChipBrush = null!;         // pastille givrée
+    public Pen ChipPen = null!;             // contour pastille
+    public Pen ChipHoverPen = null!;        // contour pastille survolée (accent)
+    public Color VignetteColor;             // teinte de la vignette de fond
 
     public Typeface LabelTypeface = null!;
     public Typeface SubTypeface = null!;
@@ -38,25 +39,26 @@ internal sealed class Theme
     public static Theme Build(AppearanceConfig ap)
     {
         var accent = ParseColor(ap.Accent, Color.FromRgb(0x7C, 0x4D, 0xFF));
-        var accentBrush = new SolidColorBrush(accent);
 
         var t = new Theme
         {
             Accent = accent,
-            AccentBrush = Freeze(accentBrush),
-            AccentSoftBrush = Freeze(new SolidColorBrush(WithAlpha(accent, 0.22))),
-            AccentGlowBrush = Freeze(new SolidColorBrush(WithAlpha(accent, 0.08))),
-            AccentTrailBrush = Freeze(new SolidColorBrush(WithAlpha(accent, 0.35))),
+            AccentBrush = Freeze(new SolidColorBrush(accent)),
+            AccentSoftBrush = Freeze(new SolidColorBrush(WithAlpha(accent, 0.75))),
+            AccentDotBrush = Freeze(new SolidColorBrush(WithAlpha(accent, 0.95))),
             AccentPen = FreezePen(new Pen(new SolidColorBrush(WithAlpha(accent, 0.9)), 1.4)),
-            AccentSoftPen = FreezePen(new Pen(new SolidColorBrush(WithAlpha(accent, 0.55)), 1.2)),
-            BackdropBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xF2, 0x1B, 0x1B, 0x23))),
-            BackdropInnerBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xE6, 0x13, 0x13, 0x19))),
-            HubBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xFA, 0x0F, 0x0F, 0x16))),
-            HubPen = FreezePen(new Pen(new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)), 1.0)),
-            HairPen = FreezePen(new Pen(new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)), 1.0)),
-            IconPen = FreezePen(new Pen(Brushes.White, 2.0)),
-            WhiteBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF))),
-            SubBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xB4, 0xE8, 0xE8, 0xF2))),
+
+            HubBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xE0, 0x14, 0x14, 0x1B))),
+            HubPen = FreezePen(new Pen(new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)), 1.0)),
+            IconPen = FreezePen(new Pen(new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF)), 1.9)),
+            WhiteBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xF6, 0xFF, 0xFF, 0xFF))),
+            SubBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xA6, 0xE9, 0xE9, 0xF4))),
+
+            ChipBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xD6, 0x18, 0x18, 0x22))),
+            ChipPen = FreezePen(new Pen(new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), 1.0)),
+            ChipHoverPen = FreezePen(new Pen(new SolidColorBrush(WithAlpha(accent, 0.9)), 1.6)),
+            VignetteColor = Color.FromArgb(0x00, 0x0B, 0x0B, 0x12),
+
             GlobalOpacity = Math.Clamp(ap.Opacity, 0.5, 1.0),
         };
 
@@ -71,8 +73,7 @@ internal sealed class Theme
     {
         try
         {
-            var c = (Color)ColorConverter.ConvertFromString(hex.Trim());
-            return c;
+            return (Color)ColorConverter.ConvertFromString(hex.Trim());
         }
         catch { return fallback; }
     }

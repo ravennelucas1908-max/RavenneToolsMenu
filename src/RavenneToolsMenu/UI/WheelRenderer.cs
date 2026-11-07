@@ -17,8 +17,9 @@ public sealed class WheelFrame
 public enum WheelAnim { None, Open, Push, Pop, Close }
 
 /// <summary>
-/// Rendu de la roue : un seul FrameworkElement, redessiné uniquement pendant les
-/// animations ou les changements de sélection — aucune horloge active au repos.
+/// Rendu de la roue — design sobre « verre dépoli » :
+/// vignette à peine visible, icônes dans de petites pastilles givrées,
+/// information au centre. Redessiné uniquement pendant animations/sélection.
 /// </summary>
 public sealed class WheelRenderer : FrameworkElement
 {
@@ -29,7 +30,7 @@ public sealed class WheelRenderer : FrameworkElement
     private Theme _theme = null!;
     private double _radius = 150;
     private double _iconSize = 26;
-    private bool _labels = true;
+    private bool _labels = false;
     private bool _animations = true;
 
     private WheelAnim _anim = WheelAnim.None;
@@ -38,11 +39,10 @@ public sealed class WheelRenderer : FrameworkElement
     private Action? _animDone;
     private bool _rendering;
 
-    // cache icônes par item (géométrie, image, ou lettre de repli)
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<MenuItem, object> _iconCache = new();
 
     public double Radius => _radius;
-    public double Deadzone => _radius * 0.24;
+    public double Deadzone => _radius * 0.22;
     public double ElementHalf => _radius * 2.05;
 
     public void Configure(AppConfig cfg)
@@ -106,7 +106,7 @@ public sealed class WheelRenderer : FrameworkElement
     {
         double dx = p.X - f.Center.X, dy = p.Y - f.Center.Y;
         double dist = Math.Sqrt(dx * dx + dy * dy);
-        if (dist < radius * 0.24) return -1;
+        if (dist < radius * 0.22) return -1;
         int n = f.Menu.Items.Count;
         if (n == 0) return -1;
         double step = 360.0 / n;
@@ -120,7 +120,7 @@ public sealed class WheelRenderer : FrameworkElement
     {
         int n = Math.Max(1, f.Menu.Items.Count);
         double angDeg = -90 + index * (360.0 / n);
-        double ring = radius * 0.62;
+        double ring = radius * 0.58;
         double rad = angDeg * Math.PI / 180.0;
         return new Point(f.Center.X + ring * Math.Cos(rad), f.Center.Y + ring * Math.Sin(rad));
     }
@@ -143,102 +143,114 @@ public sealed class WheelRenderer : FrameworkElement
         };
         double globalScale = _anim switch
         {
-            WheelAnim.Open => Lerp(0.6, 1, p),
-            WheelAnim.Close => Lerp(1, 0.94, p),
+            WheelAnim.Open => Lerp(0.88, 1, p),
+            WheelAnim.Close => Lerp(1, 0.96, p),
             _ => 1,
         };
 
         var top = _frames[^1];
         var parent = _frames.Count > 1 ? _frames[^2] : null;
 
-        double topScale = _anim == WheelAnim.Push ? Lerp(0.72, 1, p) : 1;
+        double topScale = _anim == WheelAnim.Push ? Lerp(0.8, 1, p) : 1;
         double topAlpha = _anim == WheelAnim.Pop ? 1 - p : 1;
         double parentAlpha = parent is null ? 0 : _anim switch
         {
-            WheelAnim.Push => Lerp(1, 0.16, p),
-            WheelAnim.Pop => Lerp(0.16, 1, p),
-            _ => 0.16,
+            WheelAnim.Push => Lerp(1, 0.12, p),
+            WheelAnim.Pop => Lerp(0.12, 1, p),
+            _ => 0.12,
         };
 
         dc.PushOpacity(globalAlpha * _theme.GlobalOpacity);
 
         if (parent is not null && parentAlpha > 0.01)
-            DrawFrame(dc, parent, parentAlpha, 1);
+            DrawFrame(dc, parent, parentAlpha, 0.92, ghost: true);
 
-        DrawFrame(dc, top, topAlpha, topScale * globalScale);
-        DrawTrail(dc, top);
+        DrawFrame(dc, top, topAlpha, topScale * globalScale, ghost: false);
 
         dc.Pop();
     }
 
-    private void DrawFrame(DrawingContext dc, WheelFrame f, double alpha, double scale)
+    private void DrawFrame(DrawingContext dc, WheelFrame f, double alpha, double scale, bool ghost)
     {
         if (alpha <= 0.01 || f.Menu.Items.Count == 0) return;
 
         double r = _radius * scale;
         var c = f.Center;
         int n = f.Menu.Items.Count;
-        double ring = r * 0.62;
-        double iconHalf = _iconSize / 2.0;
+        double chipR = _iconSize * 0.82;
+        bool isTop = ReferenceEquals(f, _frames[^1]) && !ghost;
+        int hoverIdx = isTop ? _hover : -1;
 
         dc.PushOpacity(alpha);
 
-        // fond de la roue : halo accent + disque sombre + contour discret
-        dc.DrawEllipse(_theme.AccentGlowBrush, null, c, r + 16, r + 16);
-        dc.DrawEllipse(_theme.BackdropBrush, _theme.HairPen, c, r, r);
+        // vignette très légère : lisibilité sans plaque opaque
+        var vignette = new RadialGradientBrush(
+            Color.FromArgb((byte)(ghost ? 0x10 : 0x44), _theme.VignetteColor.R, _theme.VignetteColor.G, _theme.VignetteColor.B),
+            Color.FromArgb(0x00, _theme.VignetteColor.R, _theme.VignetteColor.G, _theme.VignetteColor.B));
+        vignette.MappingMode = BrushMappingMode.Absolute;
+        vignette.Center = c;
+        vignette.RadiusX = vignette.RadiusY = r * 1.1;
+        vignette.Freeze();
+        dc.DrawEllipse(vignette, null, c, r * 1.1, r * 1.1);
 
-        // surbrillance de l'option active
-        int hoverIdx = ReferenceEquals(f, _frames[^1]) ? _hover : -1;
-        if (hoverIdx >= 0 && hoverIdx < n)
-        {
-            double angDeg = -90 + hoverIdx * (360.0 / n);
-            double capW = _iconSize + 30, capH = _iconSize + 16;
-            dc.PushTransform(new RotateTransform(angDeg, c.X, c.Y));
-            dc.DrawRoundedRectangle(_theme.AccentSoftBrush, _theme.AccentSoftPen,
-                new Rect(c.X - capW / 2, c.Y - ring - capH / 2, capW, capH), capH / 2, capH / 2);
-            dc.Pop();
-        }
-
-        // options
-        bool showLabels = _labels && n <= 8;
         for (int i = 0; i < n; i++)
         {
             var item = f.Menu.Items[i];
             var pos = ItemPosition(f, i, r);
             bool hovered = i == hoverIdx;
 
-            double dim = hoverIdx >= 0 && !hovered ? 0.48 : 1.0;
+            dc.PushTransform(new TranslateTransform(pos.X, pos.Y));
+
+            double dim = hoverIdx >= 0 && !hovered ? 0.55 : 1.0;
             if (dim < 1.0) dc.PushOpacity(dim);
 
+            double cr = chipR * (hovered ? 1.14 : 1.0);
+
+            // halo accent discret sur la pastille survolée
+            if (hovered)
+            {
+                var glow = new RadialGradientBrush(
+                    Color.FromArgb(0x38, _theme.Accent.R, _theme.Accent.G, _theme.Accent.B),
+                    Color.FromArgb(0x00, _theme.Accent.R, _theme.Accent.G, _theme.Accent.B));
+                glow.MappingMode = BrushMappingMode.Absolute;
+                glow.Center = new Point(0, 0);
+                glow.RadiusX = glow.RadiusY = cr * 2.4;
+                glow.Freeze();
+                dc.DrawEllipse(glow, null, new Point(0, 0), cr * 2.4, cr * 2.4);
+            }
+
+            // pastille givrée
+            dc.DrawEllipse(_theme.ChipBrush,
+                           hovered ? _theme.ChipHoverPen : _theme.ChipPen,
+                           new Point(0, 0), cr, cr);
+
             // icône
-            double iconScale = (hovered ? 1.16 : 1.0) * (_iconSize / 24.0);
-            dc.PushTransform(new TranslateTransform(pos.X, pos.Y));
+            double iconScale = (_iconSize / 24.0) * (hovered ? 1.05 : 0.92);
             dc.PushTransform(new ScaleTransform(iconScale, iconScale));
             DrawIcon(dc, item, hovered);
             dc.Pop();
-            dc.Pop();
 
-            // marqueur de sous-menu (trois points)
+            // marqueur de sous-menu : trois points accent sous la pastille
             if (item.Children is { Count: > 0 })
             {
-                double dotY = iconHalf + 7;
                 for (int d = -1; d <= 1; d++)
-                    dc.DrawEllipse(_theme.AccentSoftBrush, null, new Point(pos.X + d * 6, pos.Y + dotY), 1.7, 1.7);
+                    dc.DrawEllipse(_theme.AccentDotBrush, null,
+                        new Point(d * 5.2, cr + 7), 2.1, 2.1);
             }
 
-            // étiquette
-            if (showLabels && !string.IsNullOrEmpty(item.Label))
+            // étiquette sous la pastille (option « showItemLabels »)
+            if (_labels && !ghost && n <= 8 && !string.IsNullOrEmpty(item.Label))
             {
-                var ft = _theme.Text(item.Label, 11.5, sub: true);
-                var at = new Point(pos.X - ft.Width / 2, pos.Y + iconHalf + 14);
-                dc.DrawText(ft, at);
+                var ft = _theme.Text(item.Label, 10.5, sub: true);
+                dc.DrawText(ft, new Point(-ft.Width / 2, cr + 9));
             }
 
             if (dim < 1.0) dc.Pop();
+            dc.Pop();
         }
 
-        // moyeu central
-        double hubR = _radius * 0.24 * 0.95 * scale;
+        // moyeu : pastille centrale sobre avec l'info courante
+        double hubR = Math.Max(30, r * 0.185);
         dc.DrawEllipse(_theme.HubBrush, _theme.HubPen, c, hubR, hubR);
 
         string title, sub;
@@ -253,16 +265,16 @@ public sealed class WheelRenderer : FrameworkElement
             sub = f.IsRoot ? "" : "Glissez vers le centre pour revenir";
         }
 
-        var titleFt = _theme.Text(title, 15);
-        titleFt.MaxTextWidth = hubR * 1.75;
+        var titleFt = _theme.Text(title, 13.5);
+        titleFt.MaxTextWidth = hubR * 1.7;
         double ty = string.IsNullOrEmpty(sub) ? c.Y - titleFt.Height / 2 : c.Y - titleFt.Height - 2;
         dc.DrawText(titleFt, new Point(c.X - titleFt.Width / 2, ty));
 
         if (!string.IsNullOrEmpty(sub))
         {
-            var subFt = _theme.Text(sub, 10, sub: true);
-            subFt.MaxTextWidth = hubR * 1.8;
-            dc.DrawText(subFt, new Point(c.X - subFt.Width / 2, c.Y + 3));
+            var subFt = _theme.Text(sub, 9.5, sub: true);
+            subFt.MaxTextWidth = hubR * 1.75;
+            dc.DrawText(subFt, new Point(c.X - subFt.Width / 2, c.Y + 2));
         }
 
         dc.Pop();
@@ -277,15 +289,14 @@ public sealed class WheelRenderer : FrameworkElement
                 dc.DrawGeometry(null, hovered ? _theme.AccentPen : _theme.IconPen, geo);
                 break;
             case ImageSource img:
-                var rect = new Rect(-_iconSize / 2.0, -_iconSize / 2.0, _iconSize, _iconSize);
-                dc.DrawImage(img, rect);
+                dc.DrawImage(img, new Rect(-_iconSize / 2.0, -_iconSize / 2.0, _iconSize, _iconSize));
                 break;
             case string txt when txt.StartsWith("txt:", StringComparison.Ordinal):
                 var emoji = _theme.Text(txt[4..], _iconSize * 0.8);
                 dc.DrawText(emoji, new Point(-emoji.Width / 2, -emoji.Height / 2));
                 break;
             default:
-                var letter = _theme.Text(string.IsNullOrEmpty(item.Label) ? "?" : item.Label[..1].ToUpperInvariant(), 16);
+                var letter = _theme.Text(string.IsNullOrEmpty(item.Label) ? "?" : item.Label[..1].ToUpperInvariant(), 15);
                 dc.DrawText(letter, new Point(-letter.Width / 2, -letter.Height / 2));
                 break;
         }
@@ -310,21 +321,9 @@ public sealed class WheelRenderer : FrameworkElement
             catch { }
         }
 
-        // emoji / texte court → dessiné comme texte via la clé "txt:..."
+        // emoji / texte court
         if (item.Icon is { Length: > 0 and <= 4 }) return "txt:" + item.Icon;
         return null;
-    }
-
-    private void DrawTrail(DrawingContext dc, WheelFrame top)
-    {
-        double dx = _pointer.X - top.Center.X, dy = _pointer.Y - top.Center.Y;
-        double dist = Math.Sqrt(dx * dx + dy * dy);
-        if (dist < 8) return;
-
-        var pen = new Pen(_theme.AccentTrailBrush, 2.0) { DashStyle = DashStyles.Dot, LineJoin = PenLineJoin.Round };
-        pen.Freeze();
-        dc.DrawLine(pen, top.Center, _pointer);
-        dc.DrawEllipse(_theme.AccentSoftBrush, null, _pointer, 3.6, 3.6);
     }
 
     private static double Lerp(double a, double b, double t) => a + (b - a) * t;

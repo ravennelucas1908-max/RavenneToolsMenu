@@ -44,8 +44,11 @@ public sealed class WheelWindow : Window, ITriggerTarget
     private bool _rightArmed;
     private bool _rightCaptured;
 
-    // conversion écran → élément
+    // conversion écran → élément : origine en pixels physiques (immune aux
+    // reconversions DPI de WPF quand la fenêtre change de moniteur)
     private double _scale = 1.0;
+    private int _originX, _originY;
+    private nint _hwnd;
 
     private enum TriggerKind { Middle, X2, RightLong }
 
@@ -72,6 +75,10 @@ public sealed class WheelWindow : Window, ITriggerTarget
         Content = _renderer;
         Visibility = Visibility.Hidden;
         Left = -10000; Top = -10000;
+
+        // Créer le HWND immédiatement (caché, hors écran) : indispensable pour le
+        // positionnement physique au pixel près à l'ouverture, et pour les styles étendus.
+        _hwnd = new WindowInteropHelper(this).EnsureHandle();
 
         _rightTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Clamp(cfg.Cfg.Trigger.LongPressMs, 150, 1500)) };
         _rightTimer.Tick += (_, _) => RightTimerFired();
@@ -262,10 +269,13 @@ public sealed class WheelWindow : Window, ITriggerTarget
         _renderer.Configure(_cfg.Cfg); // lit l'accent/taille à jour
         _scale = Win32.GetScaleForPoint(px, py);
         double half = _renderer.ElementHalf;
-        Width = Height = half * 2;
-        Left = px / _scale - half;
-        Top = py / _scale - half;
+        int halfPhys = (int)Math.Round(half * _scale);
+        int sizePhys = halfPhys * 2;
+        _originX = px - halfPhys;
+        _originY = py - halfPhys;
         var center = new Point(half, half);
+
+        Width = Height = half * 2; // en DIP (cohérent avec le placement physique ci-dessous)
 
         _frames.Clear();
         _frames.Add(new WheelFrame { Menu = menu, Center = center });
@@ -274,13 +284,27 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
         _open = true;
         Visibility = Visibility.Visible;
+
+        // Placement en pixels physiques : exact même sur les écrans mis à l'échelle (DPI ≠ 100 %).
+        Win32.SetWindowPos(_hwnd, Win32.HWND_TOPMOST, _originX, _originY, sizePhys, sizePhys,
+            Win32.SWP_NOACTIVATE);
+
+        if (Core.Log.IsDebug)
+        {
+            Win32.GetWindowRect(_hwnd, out var wr);
+            Core.Log.Debug($"Fenêtre roue : origine=({_originX},{_originY}) taille={sizePhys} " +
+                           $"rect=({wr.Left},{wr.Top},{wr.Right},{wr.Bottom}) scale={_scale:0.##}");
+        }
+
         UpdatePointer(px, py);
     }
+
+    private Point ToElement(int px, int py) => new((px - _originX) / _scale, (py - _originY) / _scale);
 
     private void UpdatePointer(int px, int py)
     {
         if (!_open || _frames.Count == 0) return;
-        var p = new Point(px / _scale - Left, py / _scale - Top);
+        var p = ToElement(px, py);
         var top = _frames[^1];
         if (top.Menu.Items.Count == 0) return;
         long now = Environment.TickCount64;
@@ -378,7 +402,7 @@ public sealed class WheelWindow : Window, ITriggerTarget
             return;
         }
 
-        var p = new Point(px / _scale - Left, py / _scale - Top);
+        var p = ToElement(px, py);
         var top = _frames[^1];
         if (top.Menu.Items.Count == 0)
         {

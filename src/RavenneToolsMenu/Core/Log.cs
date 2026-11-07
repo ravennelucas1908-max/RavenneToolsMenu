@@ -13,7 +13,10 @@ internal static class Log
     {
         _dir = Path.Combine(Config.ConfigManager.AppDataDir, "logs");
         Directory.CreateDirectory(_dir);
+        IsDebug = File.Exists(Path.Combine(AppContext.BaseDirectory, "debug.flag"))
+                  || File.Exists(Path.Combine(_dir, "..", "debug.flag"));
         Info("--- session ---");
+        if (IsDebug) Info("Mode diagnostic activé (debug.flag).");
     }
 
     private static void Write(string level, string msg)
@@ -34,4 +37,11 @@ internal static class Log
     public static void Info(string msg) => Write("INFO", msg);
     public static void Warn(string msg) => Write("WARN", msg);
     public static void Error(string msg, Exception? ex = null) => Write("ERROR", ex == null ? msg : $"{msg} :: {ex.GetType().Name}: {ex.Message}");
+
+    /// <summary>Diagnostic détaillé : activé par le fichier « debug.flag » dans le dossier de l'application.</summary>
+    public static bool IsDebug { get; private set; }
+
+    public static void EnableDebug(string dir) => IsDebug = true;
+
+    public static void Debug(string msg) { if (IsDebug) Write("DEBUG", msg); }
 }

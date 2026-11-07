@@ -158,6 +158,12 @@ internal static class Win32
     [DllImport("user32.dll")]
     public static extern int GetWindowLongW(nint hWnd, int nIndex);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public static readonly nint HWND_TOPMOST = -1;
+
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_NOACTIVATE = 0x0800_0000;
     public const long WS_EX_TOOLWINDOW = 0x0000_0080;

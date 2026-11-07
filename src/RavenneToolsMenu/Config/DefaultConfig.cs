@@ -5,7 +5,7 @@ internal static class DefaultConfig
 {
     public const string Json = """
     {
-      "version": 1,
+      "version": 2,
       "trigger": {
         "button": "middle",
         "longPressMs": 320,
@@ -17,7 +17,7 @@ internal static class DefaultConfig
         "radius": 150,
         "iconSize": 26,
         "animations": true,
-        "showItemLabels": true,
+        "showItemLabels": false,
         "opacity": 0.97
       },
       "ffmpeg": {
