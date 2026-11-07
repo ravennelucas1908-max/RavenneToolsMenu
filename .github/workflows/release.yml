@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publication (fichier unique)
+        run: dotnet publish src/RavenneToolsMenu -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish
+
+      - name: Validation de la configuration
+        run: ./publish/RavenneToolsMenu.exe --validate
+
+      - name: Cohérence tag ↔ version du projet
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v',''
+          $csprojVersion = [regex]::Match((Get-Content src/RavenneToolsMenu/RavenneToolsMenu.csproj -Raw), '<Version>([\d.]+)</Version>').Groups[1].Value
+          if ($tag -ne $csprojVersion) {
+            Write-Error "Le tag v$tag ne correspond pas à la version $csprojVersion du .csproj — utilisez scripts/new-release.ps1."
+            exit 1
+          }
+
+      - name: Compilation de l'installateur (Inno Setup)
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/RavenneToolsMenu.iss'
+
+      - name: Publication de la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/RavenneToolsMenu-Setup.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
