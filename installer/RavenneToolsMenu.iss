@@ -36,7 +36,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Créer une icône sur le &bureau"; GroupDescription: "Icônes:"
-Name: "autostart"; Description: "Démarrer &automatiquement avec Windows"; GroupDescription: "Autre:", Flags: checkedonce
+Name: "autostart"; Description: "Démarrer &automatiquement avec Windows"; GroupDescription: "Autre:"; Flags: checkedonce
 Name: "launch"; Description: "Lancer {#AppName} maintenant"; GroupDescription: "Autre:"; Flags: checkedonce unchecked
 
 [Files]
