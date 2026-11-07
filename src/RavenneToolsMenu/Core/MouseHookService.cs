@@ -103,6 +103,23 @@ internal sealed class MouseHookService
             ParseTrigger(_cfg.Cfg.Trigger.Button);
         }
 
+        // Bouclier critique : une exception qui traverserait le callback natif du hook
+        // tuerait le processus entier (0xc000041d). On journalise et on rend la main.
+        try
+        {
+            return Handle(msg, data, nCode, wParam, lParam);
+        }
+        catch (Exception ex)
+        {
+            _middleGesture = false;
+            _x2Gesture = false;
+            Log.Error("Erreur dans le hook souris (neutralisée)", ex);
+            return Win32.CallNextHookEx(_hook, nCode, wParam, lParam);
+        }
+    }
+
+    private nint Handle(int msg, Win32.MSLLHOOKSTRUCT data, int nCode, nint wParam, nint lParam)
+    {
         switch (msg)
         {
             case Win32.WM_MBUTTONDOWN:

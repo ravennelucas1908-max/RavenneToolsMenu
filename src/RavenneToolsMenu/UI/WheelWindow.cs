@@ -89,13 +89,19 @@ public sealed class WheelWindow : Window, ITriggerTarget
             | Win32.WS_EX_NOACTIVATE | Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_TOPMOST);
     }
 
+    private bool _preWarmed;
+
     private void PreWarm()
     {
         // Un rendu hors écran pour forcer l'initialisation GPU, puis masquage.
+        // Si un geste a déjà commencé (molette pressée juste après le lancement),
+        // on ne touche surtout pas aux frames — le geste réchauffe la fenêtre lui-même.
+        if (_open || _preWarmed) return;
+        _preWarmed = true;
         _frames.Clear();
         _frames.Add(new WheelFrame
         {
-            Menu = new MenuDef { Label = "" },
+            Menu = new MenuDef { Label = "", Items = new List<MenuItem>() },
             Center = new Point(0, 0),
         });
         _renderer.SetFrames(_frames);
@@ -115,7 +121,12 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     bool ITriggerTarget.HandleTriggerDown(int x, int y)
     {
-        if (_open || !ShouldOpen()) return false;
+        if (_open) return false;
+        if (!ShouldOpen())
+        {
+            Log.Info("Déclencheur ignoré (processus exclu ou application plein écran)");
+            return false;
+        }
         _triggerKind = DetectTriggerKind();
         BeginGesture(x, y);
         return true;
@@ -221,6 +232,7 @@ public sealed class WheelWindow : Window, ITriggerTarget
         };
 
         var (_, menu) = _resolver.Resolve(_ctx);
+        Log.Info($"Roue ouverte à ({px},{py}) — appli « {_ctx.ProcessName} », menu {menu.Items.Count} options");
         OpenWheel(menu, px, py);
 
         // raffiner avec la détection complète (fichiers, texte, liens) si l'utilisateur n'a pas encore navigué
@@ -229,7 +241,7 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     private void OnContextDetected(ContextInfo ctx)
     {
-        if (!_open || _draggedOut || _frames.Count > 1) return;
+        if (!_open || _draggedOut || _frames.Count == 0 || _frames.Count > 1) return;
 
         var (_, menu) = _resolver.Resolve(ctx);
         if (!ReferenceEquals(menu, _frames[0].Menu))
@@ -267,9 +279,10 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     private void UpdatePointer(int px, int py)
     {
-        if (!_open) return;
+        if (!_open || _frames.Count == 0) return;
         var p = new Point(px / _scale - Left, py / _scale - Top);
         var top = _frames[^1];
+        if (top.Menu.Items.Count == 0) return;
         long now = Environment.TickCount64;
         double radius = _renderer.Radius;
         double dz = _renderer.Deadzone;
@@ -283,6 +296,7 @@ public sealed class WheelWindow : Window, ITriggerTarget
         }
 
         int idx = WheelRenderer.HitIndex(top, p, radius);
+        if (idx < 0 || idx >= top.Menu.Items.Count) return; // défense en profondeur
         if (idx != _hover)
         {
             _hover = idx;
@@ -358,10 +372,19 @@ public sealed class WheelWindow : Window, ITriggerTarget
 
     private void FinishGesture(int px, int py, bool sticky = false)
     {
-        if (!_open) return;
+        if (!_open || _frames.Count == 0)
+        {
+            ForceClose();
+            return;
+        }
 
         var p = new Point(px / _scale - Left, py / _scale - Top);
         var top = _frames[^1];
+        if (top.Menu.Items.Count == 0)
+        {
+            CloseWheel();
+            return;
+        }
         int idx = sticky ? _hover : WheelRenderer.HitIndex(top, p, _renderer.Radius);
 
         bool wasQuick = !sticky
@@ -386,7 +409,10 @@ public sealed class WheelWindow : Window, ITriggerTarget
         CloseWheel();
 
         if (toRun is not null)
+        {
+            Log.Info($"Relâchement sur « {toRun.Label} » → action {toRun.Action?.Kind ?? "aucune"}");
             _exec.Run(toRun, _ctx);
+        }
         else if (wasQuick && _cfg.Cfg.Trigger.QuickClickPassthrough && _triggerKind != TriggerKind.RightLong)
             _ = Task.Run(async () =>
             {
@@ -405,6 +431,8 @@ public sealed class WheelWindow : Window, ITriggerTarget
         var frames = _frames;
         _renderer.BeginAnim(WheelAnim.Close, 90, () =>
         {
+            // un nouveau geste a pu démarrer pendant le fondu de fermeture : ne rien casser
+            if (_open) return;
             frames.Clear();
             _renderer.SetFrames(frames);
             Visibility = Visibility.Hidden;
